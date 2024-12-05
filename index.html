@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>動画からWAV変換ツール</title>
+  </head>
+  <body>
+    <h1>動画からWAVに変換</h1>
+    <p>ここにMOVまたはMP4ファイルをアップロードしてください:</p>
+    <input type="file" id="fileInput" accept=".mov, .mp4" />
+    <button id="convertButton" disabled>変換する</button>
+    <p id="status">状態: ファイルを選択してください。</p>
+    <a id="downloadLink" style="display: none">変換されたWAVをダウンロード</a>
+
+    <script type="module">
+      import {
+        createFFmpeg,
+        fetchFile,
+      } from "https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.2/ffmpeg.min.mjs";
+
+      const ffmpeg = createFFmpeg({ log: true });
+      const fileInput = document.getElementById("fileInput");
+      const convertButton = document.getElementById("convertButton");
+      const statusText = document.getElementById("status");
+      const downloadLink = document.getElementById("downloadLink");
+
+      let selectedFile;
+
+      fileInput.addEventListener("change", (event) => {
+        selectedFile = event.target.files[0];
+        if (selectedFile) {
+          statusText.textContent = `状態: ${selectedFile.name} が選択されました。`;
+          convertButton.disabled = false;
+        } else {
+          statusText.textContent = "状態: ファイルを選択してください。";
+          convertButton.disabled = true;
+        }
+      });
+
+      convertButton.addEventListener("click", async () => {
+        if (!ffmpeg.isLoaded()) {
+          statusText.textContent = "状態: FFmpegを読み込んでいます...";
+          await ffmpeg.load();
+        }
+
+        statusText.textContent = "状態: 変換中...";
+
+        try {
+          const fileName = selectedFile.name;
+          const inputFileName = `input_${fileName}`;
+          const outputFileName = `output.wav`;
+
+          // ファイルをFFmpeg仮想ファイルシステムに読み込み
+          ffmpeg.FS("writeFile", inputFileName, await fetchFile(selectedFile));
+
+          // 動画をWAVに変換
+          await ffmpeg.run(
+            "-i",
+            inputFileName,
+            "-vn",
+            "-acodec",
+            "pcm_s16le",
+            "-ar",
+            "44100",
+            outputFileName
+          );
+
+          // 結果を取得
+          const data = ffmpeg.FS("readFile", outputFileName);
+
+          // Blobを作成し、ダウンロードリンクを更新
+          const blob = new Blob([data.buffer], { type: "audio/wav" });
+          const url = URL.createObjectURL(blob);
+
+          downloadLink.href = url;
+          downloadLink.download = `${fileName.split(".")[0]}.wav`;
+          downloadLink.style.display = "inline";
+          downloadLink.textContent = "変換されたWAVをダウンロード";
+          statusText.textContent = "状態: 変換が完了しました！";
+        } catch (error) {
+          console.error(error);
+          statusText.textContent = "エラー: 変換に失敗しました。";
+        }
+      });
+    </script>
+  </body>
+</html>
