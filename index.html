@@ -3,6 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Cross-Origin-Opener-Policy" content="same-origin" />
+    <meta http-equiv="Cross-Origin-Embedder-Policy" content="require-corp" />
     <title>動画からWAV変換ツール</title>
   </head>
   <body>
@@ -13,44 +15,17 @@
     <p id="status">状態: ファイルを選択してください。</p>
     <a id="downloadLink" style="display: none">変換されたWAVをダウンロード</a>
 
-    <script>
-      // モジュール読み込み
-      const loadFFmpeg = async () => {
-        try {
-          // 正しいURLを使ってFFmpegを読み込む
-          const ffmpegModule = await import(
-            "https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.8.3/dist/ffmpeg.min.js"
-          );
-          return ffmpegModule;
-        } catch (error) {
-          console.error("FFmpegモジュールの読み込みに失敗しました:", error);
-          alert(
-            "FFmpegの読み込みに失敗しました。インターネット接続を確認し、再試行してください。"
-          );
-          throw error; // エラーを再投げする
-        }
-      };
+    <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.8.3/dist/ffmpeg.min.js"></script>
 
+    <script>
       const fileInput = document.getElementById("fileInput");
       const convertButton = document.getElementById("convertButton");
       const statusText = document.getElementById("status");
       const downloadLink = document.getElementById("downloadLink");
 
-      let ffmpeg;
       let selectedFile;
 
-      const initializeFFmpeg = async () => {
-        const ffmpegModule = await loadFFmpeg();
-
-        // モジュールが正しくロードされたか確認
-        if (ffmpegModule && ffmpegModule.createFFmpeg) {
-          ffmpeg = ffmpegModule.createFFmpeg({ log: true });
-          await ffmpeg.load(); // FFmpegの読み込みが完了するまで待機
-        } else {
-          throw new Error("FFmpegモジュールの読み込みに失敗しました");
-        }
-      };
-
+      // ファイル選択イベント
       fileInput.addEventListener("change", (event) => {
         selectedFile = event.target.files[0];
         if (selectedFile) {
@@ -62,19 +37,34 @@
         }
       });
 
-      convertButton.addEventListener("click", async () => {
+      // FFmpegの初期化と変換処理
+      const { createFFmpeg, fetchFile } = FFmpeg;
+      const ffmpeg = createFFmpeg({ log: true });
+
+      // FFmpegがロードされたら実行
+      const loadFFmpeg = async () => {
         try {
-          if (!ffmpeg) {
-            // FFmpegが初期化されていない場合、初期化を実行
-            statusText.textContent = "状態: FFmpegを初期化しています...";
-            await initializeFFmpeg();
-          }
+          await ffmpeg.load(); // ここでFFmpegをロード
+          console.log("FFmpegが正常にロードされました");
+        } catch (error) {
+          console.error("FFmpegのロードに失敗しました:", error);
+          statusText.textContent = "FFmpegの読み込みに失敗しました。";
+        }
+      };
 
-          statusText.textContent = "状態: 変換中...";
+      // 変換ボタンがクリックされたときの処理
+      convertButton.addEventListener("click", async () => {
+        statusText.textContent = "状態: 変換中...";
 
+        try {
           const fileName = selectedFile.name;
           const inputFileName = `input_${fileName}`;
           const outputFileName = `output.wav`;
+
+          // FFmpegがロードされていない場合はロードする
+          if (!ffmpeg.isLoaded()) {
+            await loadFFmpeg();
+          }
 
           // ファイルをFFmpeg仮想ファイルシステムに読み込み
           ffmpeg.FS("writeFile", inputFileName, await fetchFile(selectedFile));
@@ -105,9 +95,12 @@
           statusText.textContent = "状態: 変換が完了しました！";
         } catch (error) {
           console.error(error);
-          statusText.textContent = `エラー: ${error.message}`;
+          statusText.textContent = "エラー: 変換に失敗しました。";
         }
       });
+
+      // 初期化
+      loadFFmpeg();
     </script>
   </body>
 </html>
